@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AnimeWatch</title>
+  <style>
+    :root{
+      --bg: #071021;
+      --panel: #0f1724;
+      --muted: #9aa8bf;
+      --accent: #7c3aed;
+      --glass: rgba(255,255,255,0.03);
+      --card-shadow: 0 8px 26px rgba(2,6,23,0.6);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: linear-gradient(180deg,#020617 0%, var(--bg) 60%);
+      color: #e6eef8;
+      padding:18px;
+    }
+    header{display:flex;gap:12px;align-items:center;margin-bottom:16px}
+    h1{margin:0;font-size:20px}
+    .sub{color:var(--muted);font-size:13px}
+    .tabs{display:flex;gap:8px;border-radius:12px;overflow:hidden;background:var(--panel);padding:6px}
+    .tab{padding:8px 12px;border-radius:8px;color:var(--muted);cursor:pointer}
+    .tab.active{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));color:#fff}
+    .controls{margin-left:auto;display:flex;gap:8px;align-items:center}
+    input[type="text"]{padding:8px;border-radius:10px;border:0;background:rgba(255,255,255,0.03);color:inherit;width:220px}
+    select, button{background:var(--accent);border:0;padding:8px 12px;border-radius:10px;color:white;cursor:pointer}
+    button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+    main{margin-top:12px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); padding:10px;border-radius:12px;backdrop-filter: blur(4px);box-shadow: var(--card-shadow);}
+    .poster{width:100%;height:280px;object-fit:cover;border-radius:8px}
+    .title{font-weight:700;font-size:14px;margin-top:8px}
+    .meta{color:var(--muted);font-size:13px;margin-top:6px}
+    .row{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:8px}
+    .badge{background:var(--glass);padding:6px 8px;border-radius:999px;font-size:12px}
+    footer{margin-top:18px;color:var(--muted);font-size:13px}
+    /* modal */
+    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:40;padding:18px}
+    .modal.open{display:flex}
+    .player{width:100%;max-width:980px;background:#071021;padding:12px;border-radius:12px}
+    .player iframe, .player video{width:100%;height:560px;border-radius:8px;border:0;background:black}
+    .close{margin-top:8px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+    .small{font-size:13px;color:var(--muted)}
+    .watchlist-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+    .embed-input{width:100%;padding:8px;border-radius:8px;border:0;background:rgba(255,255,255,0.03);color:inherit;margin-top:8px}
+    @media(max-width:700px){ .poster{height:160px} .player iframe, .player video{height:320px} .controls{display:none} }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="https://raw.githubusercontent.com/mal-enime/icon/main/anime.png" alt="" width="52" style="filter:drop-shadow(0 8px 20px rgba(0,0,0,.6))">
+    <div>
+      <h1>AnimeWatch</h1>
+    </div>
+
+    <div class="controls">
+      <div class="tabs" role="tablist">
+        <div class="tab active" data-tab="browse">Browse</div>
+        <div class="tab" data-tab="watchlist">Watchlist</div>
+      </div>
+
+      <select id="mode">
+        <option value="airing">Ongoing</option>
+        <option value="popular">Popular / Top</option>
+        <option value="season">This Season</option>
+      </select>
+      <input id="q" type="text" placeholder="Cari judul..." />
+      <button id="searchBtn">Cari</button>
+      <button id="themeBtn" title="Toggle theme" class="ghost">Theme</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="browseSection">
+      <div id="list" class="grid"></div>
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+        <button id="loadMore" class="ghost">Muat lebih banyak</button>
+        <div style="color:var(--muted);margin-left:auto" id="statusTxt"></div>
+      </div>
+    </section>
+
+    <section id="watchlistSection" style="display:none">
+      <h2 style="margin-top:0">My Watchlist</h2>
+      <div id="watchlist" class="watchlist-grid"></div>
+      <div style="margin-top:12px;color:var(--muted)">Watchlist disimpan otomatis di browser (localStorage).</div>
+    </section>
+  </main>
+
+  <div class="modal" id="modal" aria-hidden="true">
+    <div class="player" role="dialog" aria-modal="true">
+      <div id="playerHeader" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div>
+          <strong id="playerTitle"></strong>
+          <div class="small" id="playerSub"></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <a id="openMal" href="#" target="_blank" rel="noopener" class="small" style="color:var(--accent)">Buka MAL ›</a>
+          <button id="editEmbedBtn" class="ghost">Edit Embed</button>
+          <button id="closeModal" class="ghost">Tutup</button>
+        </div>
+      </div>
+
+      <div id="playerContainer" style="margin-top:10px"></div>
+
+      <div style="margin-top:8px">
+        <div style="display:none" id="embedEditor">
+          <input id="embedInput" class="embed-input" placeholder="Tempel URL embed YouTube / iframe / direct mp4 (hanya legal embeds)" />
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="saveEmbed">Simpan Embed</button>
+            <button id="removeEmbed" class="ghost">Hapus Embed</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="close">
+        <div class="small" id="embedNote">Jika tidak ada embed, aku akan coba tampilkan trailer YouTube (hasil pencarian).</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Tip: Untuk nonton langsung, tempel link embed resmi (YouTube official upload, provider yang memberi iframe embed, atau file MP4 yang kamu punya haknya). Aku **tidak** memasukkan atau membantu sumber ilegal.
+  </footer>
+
+  <script>
+    // --- UTIL & STATE ---
+    const API_BASE = 'https://api.jikan.moe/v4';
+    const listEl = document.getElementById('list');
+    const modeEl = document.getElementById('mode');
+    const qEl = document.getElementById('q');
+    const searchBtn = document.getElementById('searchBtn');
+    const statusTxt = document.getElementById('statusTxt');
+    const loadMoreBtn = document.getElementById('loadMore');
+
+    const modal = document.getElementById('modal');
+    const playerContainer = document.getElementById('playerContainer');
+    const playerTitle = document.getElementById('playerTitle');
+    const playerSub = document.getElementById('playerSub');
+    const openMal = document.getElementById('openMal');
+    const editEmbedBtn = document.getElementById('editEmbedBtn');
+    const embedEditor = document.getElementById('embedEditor');
+    const embedInput = document.getElementById('embedInput');
+    const saveEmbedBtn = document.getElementById('saveEmbed');
+    const removeEmbedBtn = document.getElementById('removeEmbed');
+    const closeModalBtn = document.getElementById('closeModal');
+
+    const watchlistSection = document.getElementById('watchlistSection');
+    const browseSection = document.getElementById('browseSection');
+    const watchlistGrid = document.getElementById('watchlist');
+
+    const tabEls = document.querySelectorAll('.tab');
+    const themeBtn = document.getElementById('themeBtn');
+
+    let page = 1;
+    let lastMode = modeEl.value;
+    let currentItem = null; // item currently in modal
+
+    // localStorage keys
+    const KEY_WATCHLIST = 'animewatch_watchlist_v1';
+    const KEY_EMBEDS = 'animewatch_embeds_v1';
+    const KEY_THEME = 'animewatch_theme_v1';
+
+    function loadJSON(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return fallback;
+        return JSON.parse(raw);
+      } catch { return fallback; }
+    }
+    function saveJSON(key, obj) { localStorage.setItem(key, JSON.stringify(obj)); }
+
+    // watchlist: array of minimal anime objects {mal_id, title, image, url}
+    function getWatchlist(){ return loadJSON(KEY_WATCHLIST, []); }
+    function setWatchlist(arr){ saveJSON(KEY_WATCHLIST, arr); }
+
+    // embeds: { [mal_id]: embedUrl }
+    function getEmbeds(){ return loadJSON(KEY_EMBEDS, {}); }
+    function setEmbeds(o){ saveJSON(KEY_EMBEDS, o); }
+
+    // theme
+    function applyTheme(){
+      const t = localStorage.getItem(KEY_THEME) || 'dark';
+      if(t === 'light'){
+        document.documentElement.style.setProperty('--bg', '#f6f8fb');
+        document.documentElement.style.setProperty('--panel', '#ffffff');
+        document.documentElement.style.setProperty('--card-shadow', '0 8px 26px rgba(2,6,23,0.08)');
+        document.body.style.color = '#061026';
+      } else {
+        document.documentElement.style.setProperty('--bg', '#071021');
+        document.documentElement.style.setProperty('--panel', '#0f1724');
+        document.documentElement.style.setProperty('--card-shadow', '0 8px 26px rgba(2,6,23,0.6)');
+        document.body.style.color = '#e6eef8';
+      }
+    }
+    applyTheme();
+
+    // --- FETCH HELPERS ---
+    async function fetchJSON(path){
+      statusTxt.textContent = 'Memuat...';
+      try{
+        const res = await fetch(path);
+        const data = await res.json();
+        statusTxt.textContent = '';
+        return data;
+      }catch(e){
+        console.error(e);
+        statusTxt.textContent = 'Gagal memuat.';
+        return null;
+      }
+    }
+
+    async function fetchAiring(){
+      const data = await fetchJSON(`${API_BASE}/seasons/now`);
+      return data?.data || [];
+    }
+    async function fetchTop(page=1){
+      const data = await fetchJSON(`${API_BASE}/top/anime?page=${page}`);
+      return data?.data || [];
+    }
+    async function fetchSeason(year, season){
+      const data = await fetchJSON(`${API_BASE}/seasons/${year}/${season}`);
+      return data?.data || [];
+    }
+    async function searchAnime(q, page=1){
+      const data = await fetchJSON(`${API_BASE}/anime?q=${encodeURIComponent(q)}&page=${page}`);
+      return data?.data || [];
+    }
+
+    // --- RENDER CARD ---
+    function createCard(item){
+      const mal_id = item.mal_id || item.synopsis ? item.mal_id : (item.mal_id || (item.url ? item.url.split('/').pop(): Math.random()));
+      const card = document.createElement('article');
+      card.className = 'card';
+
+      const img = document.createElement('img');
+      img.className = 'poster';
+      img.src = item.images?.jpg?.large_image_url || item.images?.jpg?.image_url || '';
+      img.alt = item.title;
+
+      const t = document.createElement('div');
+      t.className = 'title';
+      t.textContent = item.title;
+
+      const s = document.createElement('div');
+      s.className = 'meta';
+      const type = item.type || '';
+      const score = (item.score !== undefined && item.score !== null) ? `Score: ${item.score}` : '';
+      const status = item.status || (item.airing ? 'Airing' : '');
+      s.textContent = `${type} • ${score} • ${status}`;
+
+      const row = document.createElement('div');
+      row.className = 'row';
+
+      const left = document.createElement('div');
+      left.style.display = 'flex';
+      left.style.gap = '8px';
+      left.style.alignItems = 'center';
+
+      const badge = document.createElement('div');
+      badge.className = 'badge';
+      badge.textContent = status || '—';
+
+      const btnWatch = document.createElement('button');
+      btnWatch.textContent = 'Watch';
+      btnWatch.onclick = () => openWatch(item);
+
+      left.appendChild(badge);
+      left.appendChild(btnWatch);
+
+      const right = document.createElement('div');
+      right.style.display = 'flex';
+      right.style.gap = '6px';
+
+      const btnAdd = document.createElement('button');
+      btnAdd.className = 'ghost';
+      btnAdd.textContent = 'Add ▶';
+      btnAdd.onclick = () => addToWatchlist(item);
+
+      const btnEmbed = document.createElement('button');
+      btnEmbed.className = 'ghost';
+      btnEmbed.textContent = 'Set Embed';
+      btnEmbed.onclick = async () => {
+        // quick prompt to set embed (also accessible in modal)
+        const embeds = getEmbeds();
+        const current = embeds[item.mal_id] || '';
+        const url = prompt('Tempel URL embed resmi (YouTube/iframe/mp4). Kosongkan untuk batalkan.', current);
+        if(url === null) return;
+        if(url.trim() === '') {
+          delete embeds[item.mal_id];
+        } else {
+          embeds[item.mal_id] = url.trim();
+        }
+        setEmbeds(embeds);
+        alert('Embed disimpan pada browser (localStorage).');
+      };
+
+      right.appendChild(btnAdd);
+      right.appendChild(btnEmbed);
+
+      row.appendChild(left);
+      row.appendChild(right);
+
+      card.appendChild(img);
+      card.appendChild(t);
+      card.appendChild(s);
+      card.appendChild(row);
+
+      return card;
+    }
+
+    // --- WATCHLIST ---
+    function addToWatchlist(item){
+      const wl = getWatchlist();
+      if(wl.find(x => x.mal_id === item.mal_id)){
+        alert('Sudah ada di watchlist!');
+        return;
+      }
+      wl.unshift({
+        mal_id: item.mal_id,
+        title: item.title,
+        image: item.images?.jpg?.large_image_url || '',
+        url: item.url || ''
+      });
+      setWatchlist(wl);
+      renderWatchlist();
+      alert('Ditambahkan ke watchlist 💜');
+    }
+    function removeFromWatchlist(mal_id){
+      let wl = getWatchlist();
+      wl = wl.filter(x => x.mal_id !== mal_id);
+      setWatchlist(wl);
+      renderWatchlist();
+    }
+    function renderWatchlist(){
+      const wl = getWatchlist();
+      watchlistGrid.innerHTML = '';
+      if(wl.length === 0){
+        watchlistGrid.innerHTML = '<div style="color:var(--muted)">Watchlist kosong. Tambahkan anime dari tab Browse.</div>';
+        return;
+      }
+      wl.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.style.padding = '8px';
+        card.innerHTML = `
+          <img src="${item.image}" alt="${item.title}" style="width:100%;height:160px;object-fit:cover;border-radius:8px">
+          <div style="margin-top:8px;font-weight:700">${item.title}</div>
+          <div class="small" style="color:var(--muted);margin-top:6px">${item.url || ''}</div>
+        `;
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.gap = '8px';
+        row.style.marginTop = '8px';
+        const btnWatch = document.createElement('button');
+        btnWatch.textContent = 'Watch';
+        btnWatch.onclick = async () => {
+          // attempt to fetch more metadata from API to open modal
+          const data = await fetchJSON(`${API_BASE}/anime/${item.mal_id}`);
+          openWatch(data?.data || { mal_id: item.mal_id, title: item.title, images: {jpg: {large_image_url: item.image}}, url: item.url });
+        };
+        const btnRemove = document.createElement('button');
+        btnRemove.className = 'ghost';
+        btnRemove.textContent = 'Remove';
+        btnRemove.onclick = () => removeFromWatchlist(item.mal_id);
+        row.appendChild(btnWatch);
+        row.appendChild(btnRemove);
+        card.appendChild(row);
+        watchlistGrid.appendChild(card);
+      });
+    }
+
+    // --- PLAYER / EMBED LOGIC ---
+    function isYouTubeUrl(url){
+      return /youtu(be\.com|\.be)/i.test(url);
+    }
+    function getYouTubeEmbed(url){
+      // support full URLs and short URLs and watch?v=
+      try{
+        const u = new URL(url);
+        if(u.hostname.includes('youtu.be')){
+          return `https://www.youtube.com/embed/${u.pathname.slice(1)}`;
+        }
+        if(u.searchParams && u.searchParams.get('v')){
+          return `https://www.youtube.com/embed/${u.searchParams.get('v')}`;
+        }
+        // fallback: just search on youtube
+        return null;
+      }catch(e){ return null; }
+    }
+
+    function openWatch(item){
+      currentItem = item;
+      playerContainer.innerHTML = '';
+      playerTitle.textContent = item.title;
+      playerSub.textContent = `${item.type || ''} • ${item.episodes ? item.episodes + ' eps' : ''} ${item.score ? ' • Score ' + item.score : ''}`;
+      openMal.href = item.url || '#';
+      openMal.style.display = item.url ? 'inline-block' : 'none';
+
+      const embeds = getEmbeds();
+      const embedUrl = embeds[item.mal_id];
+
+      if(embedUrl){
+        // if youtube
+        if(isYouTubeUrl(embedUrl)){
+          const src = getYouTubeEmbed(embedUrl) || `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(item.title + ' episode')}`;
+          const iframe = document.createElement('iframe');
+          iframe.src = src;
+          iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture";
+          playerContainer.appendChild(iframe);
+        } else if(/\.(mp4|webm|ogg)(\?|$)/i.test(embedUrl)){
+          const video = document.createElement('video');
+          video.src = embedUrl;
+          video.controls = true;
+          video.autoplay = false;
+          playerContainer.appendChild(video);
+        } else {
+          // generic iframe
+          const iframe = document.createElement('iframe');
+          iframe.src = embedUrl;
+          iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture";
+          playerContainer.appendChild(iframe);
+        }
+      } else {
+        // no embed: show trailer search via youtube embed list (search)
+        const info = document.createElement('div');
+        info.style.padding = '8px';
+        info.innerHTML = `<div style="color:var(--muted);margin-bottom:8px">Tidak ada embed. Menampilkan hasil pencarian trailer YouTube sebagai pengganti.</div>`;
+        playerContainer.appendChild(info);
+        const query = encodeURIComponent(item.title + ' official trailer');
+        const iframe = document.createElement('iframe');
+        iframe.src = `https://www.youtube.com/embed?listType=search&list=${query}`;
+        iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture";
+        playerContainer.appendChild(iframe);
+      }
+
+      // setup embed editor
+      embedInput.value = embedUrl || '';
+      embedEditor.style.display = 'none';
+      modal.classList.add('open');
+      modal.setAttribute('aria-hidden', 'false');
+    }
+
+    editEmbedBtn.onclick = () => {
+      embedEditor.style.display = embedEditor.style.display === 'none' ? 'block' : 'none';
+      embedInput.focus();
+    };
+    saveEmbedBtn.onclick = () => {
+      if(!currentItem) return;
+      const url = embedInput.value.trim();
+      const embeds = getEmbeds();
+      if(url === ''){
+        delete embeds[currentItem.mal_id];
+      } else {
+        embeds[currentItem.mal_id] = url;
+      }
+      setEmbeds(embeds);
+      alert('Embed disimpan di browser (localStorage). Jika embed berfungsi, video akan muncul. Pastikan link berasal dari sumber legal.');
+      embedEditor.style.display = 'none';
+    };
+    removeEmbedBtn.onclick = () => {
+      if(!currentItem) return;
+      const embeds = getEmbeds();
+      delete embeds[currentItem.mal_id];
+      setEmbeds(embeds);
+      embedInput.value = '';
+      alert('Embed dihapus.');
+      embedEditor.style.display = 'none';
+    };
+
+    closeModalBtn.onclick = () => {
+      modal.classList.remove('open');
+      modal.setAttribute('aria-hidden', 'true');
+      playerContainer.innerHTML = '';
+      currentItem = null;
+    };
+
+    // --- MAIN LOAD LOGIC ---
+    async function loadInitial(){
+      listEl.innerHTML = '';
+      page = 1;
+      lastMode = modeEl.value;
+      if(lastMode === 'airing'){
+        const items = await fetchAiring();
+        items.forEach(i => listEl.appendChild(createCard(i)));
+      } else if(lastMode === 'popular'){
+        const items = await fetchTop(page);
+        items.forEach(i => listEl.appendChild(createCard(i)));
+      } else if(lastMode === 'season'){
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = now.getMonth() + 1;
+        let season = 'winter';
+        if(m>=4 && m<=6) season='spring';
+        if(m>=7 && m<=9) season='summer';
+        if(m>=10 && m<=12) season='fall';
+        const items = await fetchSeason(y, season);
+        items.forEach(i => listEl.appendChild(createCard(i)));
+      }
+    }
+
+    loadMoreBtn.onclick = async () => {
+      page++;
+      statusTxt.textContent = 'Memuat...';
+      if(lastMode === 'popular'){
+        const items = await fetchTop(page);
+        items.forEach(i => listEl.appendChild(createCard(i)));
+      } else {
+        statusTxt.textContent = 'Tidak ada halaman lanjutan untuk mode ini.';
+      }
+      statusTxt.textContent = '';
+    };
+
+    searchBtn.onclick = async () => {
+      const q = qEl.value.trim();
+      if(!q) return loadInitial();
+      listEl.innerHTML = '';
+      const items = await searchAnime(q, 1);
+      items.forEach(i => listEl.appendChild(createCard(i)));
+    };
+
+    qEl.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') searchBtn.click(); });
+    modeEl.addEventListener('change', ()=> loadInitial());
+
+    // --- TABS ---
+    tabEls.forEach(t => t.addEventListener('click', (e)=>{
+      tabEls.forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      const tab = t.getAttribute('data-tab');
+      if(tab === 'browse'){
+        browseSection.style.display = '';
+        watchlistSection.style.display = 'none';
+      } else {
+        browseSection.style.display = 'none';
+        watchlistSection.style.display = '';
+        renderWatchlist();
+      }
+    }));
+
+    // --- THEME ---
+    themeBtn.onclick = ()=>{
+      const current = localStorage.getItem(KEY_THEME) || 'dark';
+      const next = current === 'dark' ? 'light' : 'dark';
+      localStorage.setItem(KEY_THEME, next);
+      applyTheme();
+    };
+
+    // --- INIT ---
+    (function init(){
+      loadInitial();
+      renderWatchlist();
+      // restore open modal if user navigates back? not needed
+    })();
+
+    // accessibility: close modal with Esc
+    document.addEventListener('keydown', (e)=>{
+      if(e.key === 'Escape' && modal.classList.contains('open')) closeModalBtn.click();
+    });
+  </script>
+</body>
+</html>
